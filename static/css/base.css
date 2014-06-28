@@ -12,9 +12,11 @@ body {
 	background-color: white;
 }
 
-button {
-    transition: all 500ms;
-    -webkit-transition: all 500ms; /* Safari */
+#title {
+	width: 300px;
+	text-align: center;
+	font-size: 500%;
+	padding: 50px;
 }
 
 .create-game-button {
@@ -64,13 +66,13 @@ button {
 /* This button was generated using CSSButtonGenerator.com */
 
 #continue-game-button {
-	margin-bottom: 50px;
+	margin:50px auto;
 }
 
 .verticalflex {
     display: flex;
     flex-direction: column;
-    justify-content: center;
+    justify-content: top;
     align-items:center;
 }
 
