@@ -19,7 +19,7 @@ class GameCompletion(ndb.Model):
 	
 	@property
 	def time(self):
-		return finished - started
+		return (self.finished - self.started)
 	
 class Room(ndb.Model):
 	doors = ndb.IntegerProperty(choices = [0,1,2,3], repeated = True) # 0:North, 1:East, 2:South, 3:West
