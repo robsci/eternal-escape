@@ -1,0 +1,246 @@
+{% extends "channel.html" %}
+
+{% block title %}Escape{% endblock %}
+
+<script>
+$(function() {
+{% block runscript %}
+var room_size = 50;
+var wall_thick = 6;
+var door_size = 20;
+
+var ctx_size = wall_thick + (room_size+wall_thick)*{{ game.diff.map_size }};
+
+var mapDiv = $('<div/>',{'id':'mapdiv'}).css("width",ctx_size+"px").addClass("center");
+$( '#content' ).append(mapDiv);
+
+var mapCanvas = $('<canvas/>',{'id':'map'}).attr({'width':ctx_size,'height':ctx_size});
+$( '#mapdiv' ).append(mapCanvas);
+
+var map = document.getElementById("map");
+var ctx = map.getContext("2d");
+
+function sign(x) { return x > 0 ? 1 : x < 0 ? -1 : 0; }
+
+function Room(r, c, doors) {
+	this.row = r;
+	this.col = c;
+	this.doors = doors;
+	this.visible = false;
+	this.color = 12;
+	
+	this.colorsteps = 0;
+	this.dcolor = 1.8;
+	
+	this.fadeOut = function() {
+		this.colorsteps = Math.round(243/this.dcolor);
+	}
+	
+	this.update = function() {
+		this.color += this.dcolor*sign(this.colorsteps);
+		this.colorsteps -= sign(this.colorsteps);
+	};
+	
+	this.draw = function() {
+		this.update();
+		if (this.visible) {
+			ctx.save();
+			ctx.translate(0.5*wall_thick + this.col*(room_size+wall_thick), 0.5*wall_thick + this.row*(room_size+wall_thick));
+			ctx.beginPath();
+			ctx.lineWidth = wall_thick;
+			var redcolor = 255+Math.round((14.-255.)*(this.color-255)/(12-255));
+			ctx.strokeStyle = "rgb("+Math.round(redcolor)+", "+Math.round(this.color)+", "+Math.round(this.color)+")";
+			ctx.fillStyle = "white";
+			ctx.rect(0, 0, room_size, room_size);
+			ctx.stroke();
+			ctx.fill();
+			
+			var xshifts = [(room_size-door_size)/2., room_size, (room_size-door_size)/2., 0];
+			var yshifts = [0, (room_size-door_size)/2., room_size, (room_size-door_size)/2.];
+			var xdiffs = [door_size, 0, door_size, 0];
+			var ydiffs = [0, door_size, 0, door_size];
+   
+			for (var i=0; i < this.doors.length; i++) {
+				ctx.beginPath();
+				ctx.lineWidth = wall_thick;
+				ctx.strokeStyle = "white";
+				ctx.moveTo(xshifts[this.doors[i]], yshifts[this.doors[i]]);
+				ctx.lineTo(xshifts[this.doors[i]] + xdiffs[this.doors[i]], yshifts[this.doors[i]]+ ydiffs[this.doors[i]]);
+				ctx.stroke();
+			}
+			ctx.restore();
+		}
+	};
+}
+
+function Player(r, c, direction) {
+	this.row = r;
+	this.col = c;
+	this.dir = direction;
+	this.visible = false;
+	
+	this.rowsteps = 0;
+	this.colsteps = 0;
+	this.dirsteps = 0;
+	
+	this.dr = 0.1;
+	this.dc = 0.1;
+	this.ddir = 10;
+	
+	this.turn = function(angle) {
+		this.dirsteps += Math.round(angle/this.ddir);
+	};
+	
+	this.move = function(x, y) {
+		this.rowsteps += Math.round(x/this.dr);
+		this.colsteps += Math.round(y/this.dc);
+	};
+	
+	this.update = function() {
+		this.row += this.dr*sign(this.rowsteps);
+		this.rowsteps -= sign(this.rowsteps);
+		this.col += this.dc*sign(this.colsteps);
+		this.colsteps -= sign(this.colsteps);
+		this.dir += this.ddir*sign(this.dirsteps);
+		this.dirsteps -= sign(this.dirsteps);
+	};
+	
+	this.draw = function() {
+	this.update();
+	if(this.visible) {
+		ctx.save();
+		ctx.translate(0.5*wall_thick + this.col*(room_size+wall_thick) + room_size/2., 0.5*wall_thick + this.row*(room_size+wall_thick) + room_size/2.);
+		ctx.rotate(this.dir * Math.PI / 180);
+		ctx.beginPath();
+		ctx.moveTo(0, -room_size/5);
+		ctx.lineTo(room_size/9, room_size/8);
+		ctx.lineTo(-room_size/9, room_size/8);
+		ctx.closePath();
+		ctx.fillStyle="red";
+		//ctx.rect(0,0,room_size/5.,room_size/5.);
+		ctx.fill();
+		ctx.restore();
+	}
+	};
+}
+
+function Goal(r, c) {
+	this.row = r;
+	this.col = c;
+	this.visible = false;
+	
+	this.draw = function() {
+		if (this.visible) {
+			ctx.save();
+			ctx.translate(0.5*wall_thick + this.col*(room_size+wall_thick) + room_size*(1./2-1./10), 0.5*wall_thick + this.row*(room_size+wall_thick) + room_size/3.);
+			ctx.beginPath();
+			ctx.fillStyle="gold";
+			ctx.rect(0,0,room_size/5.,room_size/5.);
+			ctx.fill();
+			ctx.restore();
+		}
+	};
+}
+
+var rooms = [];
+for (var r=0; r < {{ game.diff.map_size }}; r++) {
+	for (var c=0; c < {{ game.diff.map_size }}; c++) {
+		var room = new Room(r, c, []);
+		rooms.push(room);
+	}
+}
+
+{% for room in game.visible_rooms %}
+rooms[{{ room }}].doors = {{ game.rooms[room].doors }};
+rooms[{{ room }}].visible = true;
+{% endfor %}
+
+var person = new Player({{ (game.curr / game.diff.map_size)|int }}, {{ game.curr % game.diff.map_size }}, {{ game.angle }});
+person.visible = true;
+
+//var finish = new Goal({{ (game.end / game.diff.map_size)|int }}, {{ game.end % game.diff.map_size }});
+
+function draw() {
+	ctx.clearRect(0, 0, ctx_size, ctx_size);
+	for (var i = 0; i < rooms.length; i++) {
+		rooms[i].draw();
+	}
+	person.draw();
+	//finish.draw();
+}
+
+function win() {
+	//finish.visible = false;
+	$( "#mapdiv" ).after("<div id='win' class='center'>You have escaped!</div>");
+	$( 'body' ).addClass("white");
+	for (var i = 0; i < rooms.length; i++) {
+		rooms[i].fadeOut();
+	}
+}
+
+function turnleft() {
+	$.post( "/post", "gameid={{ game.gameID }}&request=turn&angle=-90");
+}
+
+function turnright() {
+	$.post( "/post", "gameid={{ game.gameID }}&request=turn&angle=90");
+}
+
+function moveforward() {
+	$.post( "/post", "gameid={{ game.gameID }}&request=move");
+}
+
+$(document).keydown(function (e) {
+	var code = e.charCode || e.keyCode;
+    var input = String.fromCharCode(code);
+	if (code == '37') {
+		turnleft();
+	} else if (code == '38') {
+		moveforward();
+	} else if (code == '39') {
+		turnright();
+	}
+});
+
+//update and animate the screen
+var FPS = 30;
+setInterval(function() {
+  draw();
+}, 1000/FPS);
+
+{% endblock %}
+});
+</script>
+
+
+<script>
+{% block channel_message %}
+function anglemod(x) { return x > 180 ? anglemod(x - 360) : x < -180 ? anglemod(x + 360) : x; }
+
+function onMessage(msg) {
+    var data = $.parseJSON(msg.data);
+	console.log(data);
+	if (data.hasOwnProperty('message')) {
+		if (data.message == "turn") {
+			person.turn(anglemod(data.dir - person.dir));
+			return;
+		}
+		
+		if (data.message == "move") {
+			person.move(data.row - person.row, data.col - person.col);
+			rooms[data.row*{{ game.diff.map_size }}+data.col].doors = data.doors;
+			rooms[data.row*{{ game.diff.map_size }}+data.col].visible = true;
+			return;
+		}
+		
+		if (data.message == "win") {
+			win();
+			return;
+		}
+	}
+}
+{% endblock %}
+</script>
+
+{% block content %}
+{% endblock %}

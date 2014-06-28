@@ -1,0 +1,30 @@
+<html>
+<head>
+    {% block style %}
+        <link rel="stylesheet" type="text/css" href="/css/base.css" />
+    {% endblock %}
+    {% block scripts %}
+        <script src="js/jquery-1.9.1.js"></script>
+    {% endblock %}
+    
+    <title>Escape</title>
+	
+<!--	<script>
+  $(function() { 
+         $( ".create-game-button" ).click( function() {
+			alert( $(this).attr("id") );
+        });
+  });
+    </script>-->
+</head>
+<body class="white">
+<div id="home-buttons" class="verticalflex">
+	{% if game is defined %}
+	<a href="/play" id="continue-game-button" class="create-game-button">Continue</a>
+	{% endif %}
+	{% for diff in difficulties %}
+	<a href="/play?diff={{ diff.rank }}" id="create-game-button-{{ diff.rank }}" class="create-game-button">{{ diff.desc }}</a>
+	{% endfor %}
+</div>
+</body>
+</html>

@@ -1,0 +1,45 @@
+<html>
+<head>
+<title>{% block title %}{% endblock %}</title>
+{% block stylesheets %}
+    <link rel="stylesheet" type="text/css" href="/css/base.css" />
+{% endblock %}
+    <script type="text/javascript" src="/_ah/channel/jsapi"></script>
+</head>
+<body>
+{% block scripts %}
+	<script src="js/jquery-1.9.1.js"></script>
+{% endblock %}
+
+<div id="content">{% block content %}{% endblock %}</div>
+
+  <script>
+    $(function() {
+		{% block runscript %}{% endblock %}
+        {% block channel_open %}
+        function onOpened() {
+            console.log("Socket is open!");
+        }
+        {% endblock %}{% block channel_message %}
+        function onMessage(msg) {
+            console.log( msg.data );
+        }
+        {% endblock %}{% block channel_error %}
+        function onError(error) {
+            console.log("Socket has encountered error " + error.code + ": " + error.description);
+        }
+        {% endblock %}{% block channel_close %}
+        function onClose() {
+            console.log("Socket is closed.");
+        }
+        {% endblock %}
+        channel = new goog.appengine.Channel('{{ token }}');
+        socket = channel.open();
+        socket.onopen = onOpened;
+        socket.onmessage = onMessage;
+        socket.onerror = onError;
+        socket.onclose = onClose;
+    });
+  </script>
+</body>
+<html>
