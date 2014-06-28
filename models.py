@@ -10,6 +10,17 @@ class GameDifficulty(ndb.Model):
 	desc = ndb.StringProperty(indexed = False)
 	map_size = ndb.IntegerProperty()
 	
+class GameCompletion(ndb.Model):
+	started = ndb.DateTimeProperty()
+	finished = ndb.DateTimeProperty(auto_now_add=True)
+	
+	diff_rank = ndb.IntegerProperty()
+	moves = ndb.IntegerProperty()
+	
+	@property
+	def time(self):
+		return finished - started
+	
 class Room(ndb.Model):
 	doors = ndb.IntegerProperty(choices = [0,1,2,3], repeated = True) # 0:North, 1:East, 2:South, 3:West
 	
@@ -27,6 +38,8 @@ class Game(ndb.Model):
 	
 	curr = ndb.IntegerProperty(indexed = False) # current room number
 	dir = ndb.IntegerProperty(default = 0, choices = [0,1,2,3], indexed = False) # direction player is facing, 0:North, 1:East, 2:South, 3:West
+	
+	moves = ndb.IntegerProperty(default = 0, indexed = False)
 	
 	@property
 	def gameID(self):
@@ -113,11 +126,17 @@ class Game(ndb.Model):
 			self.curr += change
 			if self.curr not in self.visible_rooms:
 				self.visible_rooms.append(self.curr)
+			self.moves += 1
 			self.put()
 			self.send_message( { 'message': "move", 'row': self.curr/self.diff.map_size, 'col': self.curr%self.diff.map_size, 'doors': self.rooms[self.curr].doors } )
 				
 		if (self.curr == self.end):
 			self.send_message( { 'message': "win" } )
+			self.recordCompletion()
 			self.key.delete()
+			
+	def recordCompletion(self):
+		if (self.curr == self.end): # check game is finished
+			GameCompletion(started = self.created, diff_rank = self.diff.rank, moves = self.moves).put()
 				
 				
