@@ -50,7 +50,7 @@ function Room(r, c, doors) {
 			ctx.lineWidth = wall_thick;
 			var redcolor = 255+Math.round((14.-255.)*(this.color-255)/(12-255));
 			ctx.strokeStyle = "rgb("+Math.round(redcolor)+", "+Math.round(this.color)+", "+Math.round(this.color)+")";
-			ctx.fillStyle = "white";
+			ctx.fillStyle = this.doors.length == 0 ? ctx.strokeStyle : "white";
 			ctx.rect(0, 0, room_size, room_size);
 			ctx.stroke();
 			ctx.fill();

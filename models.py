@@ -55,31 +55,63 @@ class Game(ndb.Model):
 	def create_rooms(self):
 		self.rooms = [Room(doors = []) for i in range(self.diff.map_size*self.diff.map_size)]
 		
-		self.end = random.randint(0, len(self.rooms)-1)
-		curr = self.end
+		# 0: depth-first
+		# 1: randomized Prim's
+		map_gen = 1
 		
-		notvisited = range(len(self.rooms))
-		notvisited.remove(curr)
-		stack = []
+		if (map_gen == 0):
+			self.end = random.randint(0, len(self.rooms)-1)
+			curr = self.end
 		
-		while (len(notvisited) > 0):
-			neigh = [r for r in self.neighbours(curr) if r in notvisited]
-			if (len(neigh) > 0):
-				stack.append(curr)
-				next = random.choice(neigh)
+			notvisited = range(len(self.rooms))
+			notvisited.remove(curr)
+			stack = []
+		
+			while (len(notvisited) > 0):
+				neigh = [r for r in self.neighbours(curr) if r in notvisited]
+				if (len(neigh) > 0):
+					stack.append(curr)
+					next = random.choice(neigh)
+					self.rooms[curr].doors.append(self.direction(curr, next))
+					self.rooms[next].doors.append(self.direction(next, curr))
+					curr = next
+					notvisited.remove(curr)
+				elif (len(stack) > 0):
+					curr = stack.pop()
+				else:
+					curr = random.choice(notvisited)
+					notvisited.remove(curr)
+		
+			self.start = curr
+			self.curr = self.start
+			self.visible_rooms.append(self.curr)
+			
+		elif(map_gen == 1):
+			self.start = random.randint(0, len(self.rooms)-1)
+			
+			maze = set([self.start])
+			frontier = set(self.neighbours(self.start))
+			exclude = set()
+			
+			while (len(frontier) > 0):
+				next = random.sample(frontier, 1)[0]
+				neigh = set(self.neighbours(next)) - exclude
+				curr = random.sample(maze & neigh, 1)[0]
 				self.rooms[curr].doors.append(self.direction(curr, next))
 				self.rooms[next].doors.append(self.direction(next, curr))
-				curr = next
-				notvisited.remove(curr)
-			elif (len(stack) > 0):
-				curr = stack.pop()
-			else:
-				curr = random.choice(notvisited)
-				notvisited.remove(curr)
-		
-		self.start = curr
-		self.curr = self.start
-		self.visible_rooms.append(self.curr)
+				maze.add(next)
+				frontier.remove(next)
+				frontier.update(neigh - maze - exclude)
+				if (random.random() < 2.*len(frontier)/(self.diff.map_size*self.diff.map_size)):
+					try:
+						exclude.add(random.sample(set(range(self.diff.map_size*self.diff.map_size)) - (maze|frontier), 1)[0])
+					except:
+						pass
+				
+			self.end = next
+			self.curr = self.start
+			self.visible_rooms.append(self.curr)
+				
 		
 	def neighbours(self, room):
 		result = []
