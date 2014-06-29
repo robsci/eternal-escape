@@ -125,28 +125,32 @@ class StatsHandler(webapp2.RequestHandler):
 		
 		logs = GameCompletion.recent().fetch(num_events)
 		
-		attempts = [0 for x in game.difficulties]
-		total_moves = [0 for x in game.difficulties]
+		#attempts = [0 for x in game.difficulties]
+		#total_moves = [0 for x in game.difficulties]
 		moves = [[] for x in game.difficulties]
 		times = [[] for x in game.difficulties]
 		most_recent = [datetime.datetime.fromordinal(1) for x in game.difficulties]
 		
 		for log in logs:
-			attempts[log.diff_rank] += 1
-			total_moves[log.diff_rank] += log.moves
+			#attempts[log.diff_rank] += 1
+			#total_moves[log.diff_rank] += log.moves
 			moves[log.diff_rank].append(log.moves)
 			times[log.diff_rank].append(log.time.total_seconds())
 			if (log.finished > most_recent[log.diff_rank]):
 				most_recent[log.diff_rank] = log.finished
 		
 		statslist = []
-		statslist.append(	{'name':"Number of attempts", 'vals':attempts}	)
-		statslist.append(	{'name':"Average number of moves", 'vals':[total_moves[i]/attempts[i] for i in range(len(attempts))]}	)
+		statslist.append(	{'name':"Attempts", 'vals':[len(m) for m in moves]}	)
+		statslist.append(	{'name':"Min moves", 'vals':[min(m) for m in moves]}	)
+		statslist.append(	{'name':"Average moves", 'vals':[sum(m)/len(m) for m in moves]}	)
+		statslist.append(	{'name':"Max moves", 'vals':[max(m) for m in moves]}	)
 		statslist.append(	{'name':"Most recent completion", 'vals':[t.strftime("%A, %d. %B %Y %I:%M%p") for t in most_recent]}	)
+		statslist.append(	{'name':"Quickest (secs)", 'vals':[min(t) for t in times]}	)
+		statslist.append(	{'name':"Mean time (secs)", 'vals':[sum(t)/len(t) for t in times]}	)
 		
 		plotslist = []
 		plotslist.append(	{'name':"Moves", 'vals':moves}	)
-		plotslist.append(	{'name':"Times", 'vals':times}	)
+		plotslist.append(	{'name':"Times (secs)", 'vals':times}	)
 
 		template_values = { 'difficulties': game.difficulties,
 							'stats': statslist,
