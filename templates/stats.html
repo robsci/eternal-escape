@@ -1,0 +1,63 @@
+<html>
+<head>
+    {% block style %}
+        <link rel="stylesheet" type="text/css" href="/css/base.css" />
+    {% endblock %}
+    {% block scripts %}
+        <script src="js/jquery-1.9.1.js"></script>
+		<script type="text/javascript" src="https://www.google.com/jsapi"></script>
+		<script type="text/javascript">
+      google.load("visualization", "1", {packages:["corechart"]});
+      google.setOnLoadCallback(drawCharts);
+	  function drawChart(data, div) {
+		var options = {
+          legend: { position: 'none' },
+		  chartArea:{left:20,top:20,width:'80%',height:'75%'}
+        };
+
+        var chart = new google.visualization.Histogram(document.getElementById(div));
+        chart.draw(data, options);
+	  };
+	  
+      function drawCharts() {
+		{% for plot in plots %}
+		{% set plotnum = loop.index %}
+			{% for val in plot.vals %}
+				drawChart(google.visualization.arrayToDataTable([
+					['{{ plot.name }}']{% for x in val %},
+					[{{ x }}]{% endfor %}]), "plot-{{ plotnum }}-{{ loop.index }}");
+			{% endfor %}
+		{% endfor %}
+      }
+    </script>
+    {% endblock %}
+    
+    <title>Escape</title>
+	<div id="title" class="center">Escape Statistics</div>
+</head>
+<body class="white">
+    <table class="center stats">
+		<tr>
+		<td></td>
+		{% for diff in difficulties %}<td>{{ diff.desc }}</td>{% endfor %}
+		</tr>
+    {% for stat in stats %}
+        <tr>
+        <td class="statname">{{ stat.name }} :</td>
+		{% for val in stat.vals %}
+        <td class="statvalue">{{ val }}</td>
+		{% endfor %}
+        </tr>
+    {% endfor %}
+	{% for plot in plots %}
+		{% set plotnum = loop.index %}
+        <tr>
+        <td class="statname">{{ plot.name }} :</td>
+		{% for val in plot.vals %}
+        <td class="statvalue"><div id="plot-{{ plotnum }}-{{ loop.index }}" style="width: 200px; height: 150px;"></div></td>
+		{% endfor %}
+        </tr>
+    {% endfor %}
+    </table>
+</body>
+</html>
