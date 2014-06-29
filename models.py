@@ -86,12 +86,12 @@ class Game(ndb.Model):
 			self.curr = self.start
 			self.visible_rooms.append(self.curr)
 			
-		elif(map_gen == 1):
+		elif (map_gen == 1):
 			self.start = random.randint(0, len(self.rooms)-1)
 			
 			maze = set([self.start])
 			frontier = set(self.neighbours(self.start))
-			exclude = set()
+			exclude = set([])
 			
 			while (len(frontier) > 0):
 				next = random.sample(frontier, 1)[0]
