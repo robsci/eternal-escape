@@ -228,7 +228,8 @@ function onMessage(msg) {
 		
 		if (data.message == "move") {
 			person.move(data.row - person.row, data.col - person.col);
-			rooms[data.row*{{ game.diff.map_size }}+data.col].doors = data.doors;
+			rooms[data.row*{{ game.diff.map_size }}+data.col].doors = data.room.doors;
+			console.log(data.room.event);
 			rooms[data.row*{{ game.diff.map_size }}+data.col].visible = true;
 			return;
 		}

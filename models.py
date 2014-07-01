@@ -24,9 +24,39 @@ class GameCompletion(ndb.Model):
 	@classmethod
 	def recent(cls):
 		return cls.query().order(-cls.finished)
+
+
+class EventOption(ndb.Model):
+	desc = ndb.TextProperty()
+
+	
+class Event(ndb.Model):
+	desc = ndb.TextProperty()
+	options = ndb.StructuredProperty(EventOption, repeated = True)
+	
+	@staticmethod
+	def event_key_name(eventID):
+		return 'e'+str(eventID)
+	
+	@staticmethod
+	def event_key(eventID):
+		return ndb.Key('Event', Event.event_key_name(eventID))
+		
+	@staticmethod
+	def eventID(event_key):
+		return event_key.id()[1:]
+		
+	def to_dict(self):
+		return {'desc': self.desc, 'options': [opt.desc for opt in self.options]}
+
 	
 class Room(ndb.Model):
 	doors = ndb.IntegerProperty(choices = [0,1,2,3], repeated = True) # 0:North, 1:East, 2:South, 3:West
+	event = ndb.KeyProperty(Event)
+	
+	def to_dict(self):
+		return {'doors': self.doors, 'event': self.event.get().to_dict()}
+
 	
 class Game(ndb.Model):
 	last_modified = ndb.DateTimeProperty(auto_now=True, indexed = False)
@@ -56,15 +86,18 @@ class Game(ndb.Model):
 	def send_message(self, dict):
 		channel.send_message( self.client_id, json.dumps(dict) )
 
-	def create_rooms(self):
+	def create_rooms(self, seed = -1):
 		self.rooms = [Room(doors = []) for i in range(self.diff.map_size*self.diff.map_size)]
 		
 		# 0: depth-first
 		# 1: randomized Prim's
 		map_gen = 1
 		
+		if (seed < 0):
+			seed = random.randint(0, len(self.rooms)-1)
+		
 		if (map_gen == 0):
-			self.end = random.randint(0, len(self.rooms)-1)
+			self.end = seed
 			curr = self.end
 		
 			notvisited = range(len(self.rooms))
@@ -91,7 +124,7 @@ class Game(ndb.Model):
 			self.visible_rooms.append(self.curr)
 			
 		elif (map_gen == 1):
-			self.start = random.randint(0, len(self.rooms)-1)
+			self.start = seed
 			
 			maze = set([self.start])
 			frontier = set(self.neighbours(self.start))
@@ -164,7 +197,7 @@ class Game(ndb.Model):
 				self.visible_rooms.append(self.curr)
 			self.moves += 1
 			self.put()
-			self.send_message( { 'message': "move", 'row': self.curr/self.diff.map_size, 'col': self.curr%self.diff.map_size, 'doors': self.rooms[self.curr].doors } )
+			self.send_message( { 'message': "move", 'row': self.curr/self.diff.map_size, 'col': self.curr%self.diff.map_size, 'room': self.rooms[self.curr].to_dict() } )
 				
 		if (self.curr == self.end):
 			self.send_message( { 'message': "win" } )
@@ -174,5 +207,8 @@ class Game(ndb.Model):
 	def recordCompletion(self):
 		if (self.curr == self.end): # check game is finished
 			GameCompletion(started = self.created, diff_rank = self.diff.rank, moves = self.moves).put()
+			
+	def addEvent(self, event_key, roomnum):
+		self.rooms[roomnum].event = event_key
 				
 				
