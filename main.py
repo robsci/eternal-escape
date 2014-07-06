@@ -17,6 +17,7 @@
 import webapp2
 import jinja2
 import datetime
+import json
 
 from google.appengine.ext import ndb
 from google.appengine.api import channel
@@ -91,9 +92,8 @@ class CreateGame(BaseHandler):
 				game_instance = self.template_values['game']
 				
 		try:
-			token = channel.create_channel( game_instance.client_id )
-
-			self.template_values.update({'token': token})
+			#token = channel.create_channel( game_instance.client_id )
+			#self.template_values.update({'token': token})
 
 			template = jinja_environment.get_template( 'play.html' )	
 			self.response.out.write(template.render(self.template_values))
@@ -109,15 +109,24 @@ class GameHandler(webapp2.RequestHandler):
 			if game_instance:
 				if (request == 'turn'):
 					angle = int(self.request.get('angle'))
-					game_instance.turn(angle)
+					response = game_instance.turn(angle)
 				elif (request == 'move'):
-					game_instance.move()
+					response = game_instance.move()
+				elif (request == 'event'):
+					reply = self.request.get('reply')
+					if reply:
+						response = game_instance.event_reply(int(reply))
+					else:
+						response = json.dumps({ 'message': "error", 'error': "no event reply" })
 				else:
-					pass # request doesn't exist
+					response = json.dumps({ 'message': "error", 'error': "request " + request + " doesn't exist" })
 			else:
-				pass # game doesn't exist
+				response = json.dumps({ 'message': "error", 'error': "game doesn't exist" })
 		else:
-			pass # bad request
+			response = json.dumps({ 'message': "error", 'error': "bad request" })
+		
+		self.response.headers.add_header('content-type', 'application/json', charset='utf-8')
+		self.response.out.write(response)
 			
 class StatsHandler(webapp2.RequestHandler):
 	def get(self):

@@ -9,13 +9,17 @@
 <body>
 {% block scripts %}
 	<script src="js/jquery-1.9.1.js"></script>
+	<script>
+	$(function() {
+		{% block runscript %}{% endblock %}
+	});
+	</script>
 {% endblock %}
 
 <div id="content">{% block content %}{% endblock %}</div>
 
   <script>
     $(function() {
-		{% block runscript %}{% endblock %}
         {% block channel_open %}
         function onOpened() {
             console.log("Socket is open!");
@@ -33,12 +37,12 @@
             console.log("Socket is closed.");
         }
         {% endblock %}
-        channel = new goog.appengine.Channel('{{ token }}');
+        /*channel = new goog.appengine.Channel('{{ token }}');
         socket = channel.open();
         socket.onopen = onOpened;
         socket.onmessage = onMessage;
         socket.onerror = onError;
-        socket.onclose = onClose;
+        socket.onclose = onClose;*/
     });
   </script>
 </body>

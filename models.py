@@ -24,9 +24,79 @@ class GameCompletion(ndb.Model):
 	@classmethod
 	def recent(cls):
 		return cls.query().order(-cls.finished)
+
+
+class EventOption(ndb.Model):
+	desc = ndb.TextProperty()
 	
+	def choose(self, game):
+		game.event_locked = False
+		game.put()
+		return { 'message': "event-response", 'response': "good choice" }
+
+	
+class Event(ndb.Model):
+	desc = ndb.TextProperty()
+	options = ndb.StructuredProperty(EventOption, repeated = True)
+	next = ndb.KeyProperty("Event")
+	
+	@staticmethod
+	def event_key_name(eventID):
+		return 'e'+str(eventID)
+	
+	@staticmethod
+	def event_key(eventID):
+		return ndb.Key('Event', Event.event_key_name(eventID))
+		
+	@staticmethod
+	def eventID(event_key):
+		return event_key.id()[1:]
+		
+	def to_dict(self):
+		return {'desc': self.desc, 'options': [opt.desc for opt in self.options]}
+		
+	def event_reply(self, reply, game):
+		if (reply >= len(self.options) or reply < 0):
+			return { 'message': "error", 'error': "bad event reply" }
+		else:
+			return self.options[reply].choose(game)
+
+
 class Room(ndb.Model):
 	doors = ndb.IntegerProperty(choices = [0,1,2,3], repeated = True) # 0:North, 1:East, 2:South, 3:West
+	event = ndb.KeyProperty(Event)
+	
+	def to_dict(self):
+		if (self.event):
+			event = self.event.get().to_dict()
+		else:
+			event = None
+		return {'doors': self.doors, 'event': event}
+		
+	def require_response(self):
+		ans = False
+		if (self.event):
+			event = self.event.get()
+			if (event and event.options):
+				ans = True
+		return ans
+		
+	def event_reply(self, reply, game):
+		response = { 'message': "error", 'error': "no event" }
+		if (self.event):
+			event = self.event.get()
+			if event:
+				response = event.event_reply(reply, game)
+		return response
+		
+	def next_event_key(self):
+		key = Event.event_key(0)
+		if (self.event):
+			event = self.event.get()
+			if (event and event.next):
+				key = event.next
+		return key
+
 	
 class Game(ndb.Model):
 	last_modified = ndb.DateTimeProperty(auto_now=True, indexed = False)
@@ -36,6 +106,7 @@ class Game(ndb.Model):
 	
 	rooms = ndb.LocalStructuredProperty(Room, repeated=True, indexed = False)
 	visible_rooms = ndb.IntegerProperty(repeated = True, indexed = False)
+	event_locked = ndb.BooleanProperty(default = False, indexed = False)
 	
 	start = ndb.IntegerProperty(indexed = False)
 	end = ndb.IntegerProperty(indexed = False)
@@ -49,130 +120,66 @@ class Game(ndb.Model):
 	def gameID(self):
 		return self.key.id()
 		
-	@property
-	def client_id(self):
-		return str(self.gameID)
+	#@property
+	#def client_id(self):
+	#	return str(self.gameID)
 	
-	def send_message(self, dict):
-		channel.send_message( self.client_id, json.dumps(dict) )
-
-	def create_rooms(self):
-		self.rooms = [Room(doors = []) for i in range(self.diff.map_size*self.diff.map_size)]
-		
-		# 0: depth-first
-		# 1: randomized Prim's
-		map_gen = 1
-		
-		if (map_gen == 0):
-			self.end = random.randint(0, len(self.rooms)-1)
-			curr = self.end
-		
-			notvisited = range(len(self.rooms))
-			notvisited.remove(curr)
-			stack = []
-		
-			while (len(notvisited) > 0):
-				neigh = [r for r in self.neighbours(curr) if r in notvisited]
-				if (len(neigh) > 0):
-					stack.append(curr)
-					next = random.choice(neigh)
-					self.rooms[curr].doors.append(self.direction(curr, next))
-					self.rooms[next].doors.append(self.direction(next, curr))
-					curr = next
-					notvisited.remove(curr)
-				elif (len(stack) > 0):
-					curr = stack.pop()
-				else:
-					curr = random.choice(notvisited)
-					notvisited.remove(curr)
-		
-			self.start = curr
-			self.curr = self.start
-			self.visible_rooms.append(self.curr)
-			
-		elif (map_gen == 1):
-			self.start = random.randint(0, len(self.rooms)-1)
-			
-			maze = set([self.start])
-			frontier = set(self.neighbours(self.start))
-			exclude = set([])
-			
-			while (len(frontier) > 0):
-				next = random.sample(frontier, 1)[0]
-				neigh = set(self.neighbours(next)) - exclude
-				curr = random.sample(maze & neigh, 1)[0]
-				self.rooms[curr].doors.append(self.direction(curr, next))
-				self.rooms[next].doors.append(self.direction(next, curr))
-				maze.add(next)
-				frontier.remove(next)
-				frontier.update(neigh - maze - exclude)
-				if (random.random() < 2.*len(frontier)/(self.diff.map_size*self.diff.map_size)):
-					try:
-						exclude.add(random.sample(set(range(self.diff.map_size*self.diff.map_size)) - (maze|frontier), 1)[0])
-					except:
-						pass
-				
-			self.end = next
-			self.curr = self.start
-			self.visible_rooms.append(self.curr)
-				
-		
-	def neighbours(self, room):
-		result = []
-		if (room >= self.diff.map_size): # not on top row
-			result.append(room - self.diff.map_size)
-		if (room % self.diff.map_size != self.diff.map_size-1): # not on right column
-			result.append(room + 1)
-		if (room < self.diff.map_size*(self.diff.map_size-1)): # not on bottom row
-			result.append(room + self.diff.map_size)
-		if (room % self.diff.map_size != 0): # not on left column
-			result.append(room - 1)
-		return result
-		
-	def direction(self, room1, room2): # direction of room 2 from room 1 (used for placing doors)
-		if (room2 == room1+1):
-			return 1 # East
-		elif (room2 == room1-1):
-			return 3 # West
-		elif (room2 > room1):
-			return 2 # South
-		else:
-			return 0 # North
+	#def send_message(self, dict):
+	#	channel.send_message( self.client_id, json.dumps(dict) )
 			
 	@property
 	def angle(self):
 		return self.dir*90
 			
 	def turn(self, angle):
-		self.dir = (self.dir + int(math.copysign(1,angle)))%4; # either turn 90 degrees left or right
-		self.put()
-		self.send_message( { 'message': "turn", 'dir': self.angle } )
+		response = {}
+		if (not self.event_locked):
+			self.dir = (self.dir + int(math.copysign(1,angle)))%4; # either turn 90 degrees left or right
+			self.put()
+			response.update( { 'message': "turn", 'dir': self.angle } )
+			#self.send_message( { 'message': "turn", 'dir': self.angle } )
+		return json.dumps(response)
 		
 	def move(self):
-		if (self.dir in self.rooms[self.curr].doors):
-			if (self.dir == 0):
-				change = - self.diff.map_size
-			elif (self.dir == 1):
-				change = 1
-			elif (self.dir == 2):
-				change = self.diff.map_size
-			elif (self.dir == 3):
-				change = - 1
+		response = {}
+		if (not self.event_locked):
+			if (self.dir in self.rooms[self.curr].doors):
+				if (self.dir == 0):
+					change = - self.diff.map_size
+				elif (self.dir == 1):
+					change = 1
+				elif (self.dir == 2):
+					change = self.diff.map_size
+				elif (self.dir == 3):
+					change = - 1
+			
+				self.rooms[self.curr].event = self.rooms[self.curr].next_event_key()
+				self.curr += change
+				if self.curr not in self.visible_rooms:
+					self.visible_rooms.append(self.curr)
+				self.moves += 1
+				if self.rooms[self.curr].require_response():
+					self.event_locked = True
+				self.put()
+				#self.send_message( { 'message': "move", 'row': self.curr/self.diff.map_size, 'col': self.curr%self.diff.map_size, 'room': self.rooms[self.curr].to_dict() } )
+				response.update( { 'message': "move", 'row': self.curr/self.diff.map_size, 'col': self.curr%self.diff.map_size, 'room': self.rooms[self.curr].to_dict(),  'win': False } )
+					
+			if (self.curr == self.end):
+				response.update( { 'win': True } )
+				self.recordCompletion()
+				self.key.delete()
+			
+		return json.dumps(response)
 		
-			self.curr += change
-			if self.curr not in self.visible_rooms:
-				self.visible_rooms.append(self.curr)
-			self.moves += 1
-			self.put()
-			self.send_message( { 'message': "move", 'row': self.curr/self.diff.map_size, 'col': self.curr%self.diff.map_size, 'doors': self.rooms[self.curr].doors } )
-				
-		if (self.curr == self.end):
-			self.send_message( { 'message': "win" } )
-			self.recordCompletion()
-			self.key.delete()
+	def event_reply(self, reply):
+		response = self.rooms[self.curr].event_reply(reply, self)
+		return json.dumps(response)
 			
 	def recordCompletion(self):
 		if (self.curr == self.end): # check game is finished
 			GameCompletion(started = self.created, diff_rank = self.diff.rank, moves = self.moves).put()
+			
+	def addEvent(self, event_key, roomnum):
+		self.rooms[roomnum].event = event_key
 				
 				
