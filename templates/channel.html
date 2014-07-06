@@ -9,13 +9,17 @@
 <body>
 {% block scripts %}
 	<script src="js/jquery-1.9.1.js"></script>
+	<script>
+	$(function() {
+		{% block runscript %}{% endblock %}
+	});
+	</script>
 {% endblock %}
 
 <div id="content">{% block content %}{% endblock %}</div>
 
   <script>
     $(function() {
-		{% block runscript %}{% endblock %}
         {% block channel_open %}
         function onOpened() {
             console.log("Socket is open!");

@@ -8,16 +8,15 @@ from google.appengine.api import channel
 
 from models import *
 
-difficulties = [ GameDifficulty(rank = 0, desc = "Easy", map_size = 4),
-				 GameDifficulty(rank = 1, desc = "Normal", map_size = 8),
+difficulties = [GameDifficulty(rank = 0, desc = "Easy", map_size = 4),
+				GameDifficulty(rank = 1, desc = "Normal", map_size = 8),
 				GameDifficulty(rank = 2, desc = "Difficult", map_size = 12)]
 
 
 def createGame(difficulty):
 	game = Game(diff = difficulty)
-	game = createRooms(game, seed=0)
-	event = Event.get_or_insert(Event.event_key_name(1), desc = "Test Event", options = [EventOption(desc = "OK"), EventOption(desc = "Cancel")])
-	game.addEvent(event.key, 1)
+	game = createRooms(game)
+	game = populateEvents(game)
 	game.put()
 	return game
 
@@ -106,4 +105,11 @@ def createRooms(game, map_gen = 1, seed = -1):
 		game.curr = game.start
 		game.visible_rooms.append(game.curr)
 		
+	return game
+	
+def populateEvents(game):
+	revisit_event = Event.get_or_insert(Event.event_key_name(0), desc = "This looks familiar")
+	game.addEvent(revisit_event.key, game.start)
+	#test_event = Event.get_or_insert(Event.event_key_name(1), desc = "Test Event", options = [EventOption(desc = "OK"), EventOption(desc = "Cancel")])
+	#game.addEvent(test_event.key, 1)
 	return game

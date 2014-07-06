@@ -28,11 +28,17 @@ class GameCompletion(ndb.Model):
 
 class EventOption(ndb.Model):
 	desc = ndb.TextProperty()
+	
+	def choose(self, game):
+		game.event_locked = False
+		game.put()
+		return { 'message': "event-response", 'response': "good choice" }
 
 	
 class Event(ndb.Model):
 	desc = ndb.TextProperty()
 	options = ndb.StructuredProperty(EventOption, repeated = True)
+	next = ndb.KeyProperty("Event")
 	
 	@staticmethod
 	def event_key_name(eventID):
@@ -48,8 +54,14 @@ class Event(ndb.Model):
 		
 	def to_dict(self):
 		return {'desc': self.desc, 'options': [opt.desc for opt in self.options]}
+		
+	def event_reply(self, reply, game):
+		if (reply >= len(self.options) or reply < 0):
+			return { 'message': "error", 'error': "bad event reply" }
+		else:
+			return self.options[reply].choose(game)
 
-	
+
 class Room(ndb.Model):
 	doors = ndb.IntegerProperty(choices = [0,1,2,3], repeated = True) # 0:North, 1:East, 2:South, 3:West
 	event = ndb.KeyProperty(Event)
@@ -60,6 +72,30 @@ class Room(ndb.Model):
 		else:
 			event = None
 		return {'doors': self.doors, 'event': event}
+		
+	def require_response(self):
+		ans = False
+		if (self.event):
+			event = self.event.get()
+			if (event and event.options):
+				ans = True
+		return ans
+		
+	def event_reply(self, reply, game):
+		response = { 'message': "error", 'error': "no event" }
+		if (self.event):
+			event = self.event.get()
+			if event:
+				response = event.event_reply(reply, game)
+		return response
+		
+	def next_event_key(self):
+		key = Event.event_key(0)
+		if (self.event):
+			event = self.event.get()
+			if (event and event.next):
+				key = event.next
+		return key
 
 	
 class Game(ndb.Model):
@@ -70,6 +106,7 @@ class Game(ndb.Model):
 	
 	rooms = ndb.LocalStructuredProperty(Room, repeated=True, indexed = False)
 	visible_rooms = ndb.IntegerProperty(repeated = True, indexed = False)
+	event_locked = ndb.BooleanProperty(default = False, indexed = False)
 	
 	start = ndb.IntegerProperty(indexed = False)
 	end = ndb.IntegerProperty(indexed = False)
@@ -95,36 +132,47 @@ class Game(ndb.Model):
 		return self.dir*90
 			
 	def turn(self, angle):
-		self.dir = (self.dir + int(math.copysign(1,angle)))%4; # either turn 90 degrees left or right
-		self.put()
-		#self.send_message( { 'message': "turn", 'dir': self.angle } )
-		return json.dumps( { 'message': "turn", 'dir': self.angle } )
+		response = {}
+		if (not self.event_locked):
+			self.dir = (self.dir + int(math.copysign(1,angle)))%4; # either turn 90 degrees left or right
+			self.put()
+			response.update( { 'message': "turn", 'dir': self.angle } )
+			#self.send_message( { 'message': "turn", 'dir': self.angle } )
+		return json.dumps(response)
 		
 	def move(self):
 		response = {}
-		if (self.dir in self.rooms[self.curr].doors):
-			if (self.dir == 0):
-				change = - self.diff.map_size
-			elif (self.dir == 1):
-				change = 1
-			elif (self.dir == 2):
-				change = self.diff.map_size
-			elif (self.dir == 3):
-				change = - 1
+		if (not self.event_locked):
+			if (self.dir in self.rooms[self.curr].doors):
+				if (self.dir == 0):
+					change = - self.diff.map_size
+				elif (self.dir == 1):
+					change = 1
+				elif (self.dir == 2):
+					change = self.diff.map_size
+				elif (self.dir == 3):
+					change = - 1
+			
+				self.rooms[self.curr].event = self.rooms[self.curr].next_event_key()
+				self.curr += change
+				if self.curr not in self.visible_rooms:
+					self.visible_rooms.append(self.curr)
+				self.moves += 1
+				if self.rooms[self.curr].require_response():
+					self.event_locked = True
+				self.put()
+				#self.send_message( { 'message': "move", 'row': self.curr/self.diff.map_size, 'col': self.curr%self.diff.map_size, 'room': self.rooms[self.curr].to_dict() } )
+				response.update( { 'message': "move", 'row': self.curr/self.diff.map_size, 'col': self.curr%self.diff.map_size, 'room': self.rooms[self.curr].to_dict(),  'win': False } )
+					
+			if (self.curr == self.end):
+				response.update( { 'win': True } )
+				self.recordCompletion()
+				self.key.delete()
+			
+		return json.dumps(response)
 		
-			self.curr += change
-			if self.curr not in self.visible_rooms:
-				self.visible_rooms.append(self.curr)
-			self.moves += 1
-			self.put()
-			#self.send_message( { 'message': "move", 'row': self.curr/self.diff.map_size, 'col': self.curr%self.diff.map_size, 'room': self.rooms[self.curr].to_dict() } )
-			response.update( { 'message': "move", 'row': self.curr/self.diff.map_size, 'col': self.curr%self.diff.map_size, 'room': self.rooms[self.curr].to_dict(),  'win': False } )
-				
-		if (self.curr == self.end):
-			response.update( { 'win': True } )
-			self.recordCompletion()
-			self.key.delete()
-		
+	def event_reply(self, reply):
+		response = self.rooms[self.curr].event_reply(reply, self)
 		return json.dumps(response)
 			
 	def recordCompletion(self):

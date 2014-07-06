@@ -173,18 +173,26 @@ function draw() {
 
 function win() {
 	//finish.visible = false;
-	$( "#mapdiv" ).after("<div id='win' class='center'>You have escaped!</div>");
+	//$( "#mapdiv" ).after("<div id='win' class='center'>You have escaped!</div>");
+	$('#window-desc').html("You have escaped!").css('color','rgb(24,23,22)');
 	$( 'body' ).addClass("white");
+	$( '#window' ).css('background-color',"white");
 	for (var i = 0; i < rooms.length; i++) {
 		rooms[i].fadeOut();
 	}
 }
 
-function triggerEvent(event) {
-	if (event) {
-		listening = false;
-		console.log(event);
+function triggerEvent(room) {
+	$('#window-table tr:gt(0)').remove();
+	if (room.event) {
+		listening = (room.event.options.length == 0);
+		$('#window-desc').html(room.event.desc);
+		for (var i=0; i < room.event.options.length; i++) {
+			$('#window-table tr:last').after('<tr><td class="event-option" id="event-option-'+i+'">'+room.event.options[i]+'</td></tr>');
+		}
+	} else {
 		listening = true;
+		$('#window-desc').html("The room is empty");
 	}
 }
 
@@ -196,25 +204,33 @@ function processMessage(data) {
 	if (data.hasOwnProperty('message')) {
 		if (data.message == "error") {
 			console.log(data.error);
-			return;
+			//return;
 		}
 	
 		if (data.message == "turn") {
 			person.turn(anglemod(data.dir - person.dir));
-			return;
+			//return;
 		}
 		
 		if (data.message == "move") {
+			var oldRoom = Math.round(person.row*{{ game.diff.map_size }}+person.col);
 			person.move(data.row - person.row, data.col - person.col);
 			rooms[data.row*{{ game.diff.map_size }}+data.col].doors = data.room.doors;
-			triggerEvent(data.room.event);
+			triggerEvent(data.room);
 			rooms[data.row*{{ game.diff.map_size }}+data.col].visible = true;
 			if (data.win) {
 				win();
 			}
+			setTimeout(function() {rooms[oldRoom].visible = false;}, 100);
 			return;
 		}
+		
+		if (data.message == "event-response") {
+			triggerEvent({event: {desc: data.response, options:[]}});
+			//return;
+		}
 	}
+	listening = true;
 }
 
 function Server(ajaxTargetUrl) {
@@ -233,10 +249,8 @@ function Server(ajaxTargetUrl) {
 		})
 		.fail(function( jqXHR, textStatus ) {
 			console.log( "Request failed: " + textStatus );
-		})
-		.always(function() {
 			listening = true;
-		});
+		})
 	};
 }
 
@@ -250,6 +264,9 @@ function turnright() {
 }
 function moveforward() {
 	postServer.request({ request: "move" });
+}
+function eventreply(reply) {
+	postServer.request({ request: "event", reply: reply });
 }
 
 $(document).keydown(function (e) {
@@ -269,6 +286,10 @@ $(document).keydown(function (e) {
 	}
 });
 
+$('#window-table').on( "click", 'td.event-option', function() {
+	eventreply($(this).attr('id').slice(13));
+});
+
 //update and animate the screen
 $(document).ready(function () {
 	listening = true;
@@ -284,4 +305,14 @@ $(document).ready(function () {
 </script>
 
 {% block content %}
+<div id="window" class="center">
+<table id="window-table">
+<tr>
+<td id="window-desc">
+You awaken in a dark room.<br /><br />
+There might be a way out ...
+</td>
+</tr>
+</table>
+</div>
 {% endblock %}

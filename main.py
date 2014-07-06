@@ -112,6 +112,12 @@ class GameHandler(webapp2.RequestHandler):
 					response = game_instance.turn(angle)
 				elif (request == 'move'):
 					response = game_instance.move()
+				elif (request == 'event'):
+					reply = self.request.get('reply')
+					if reply:
+						response = game_instance.event_reply(int(reply))
+					else:
+						response = json.dumps({ 'message': "error", 'error': "no event reply" })
 				else:
 					response = json.dumps({ 'message': "error", 'error': "request " + request + " doesn't exist" })
 			else:
