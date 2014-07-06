@@ -5,6 +5,8 @@
 <script>
 $(function() {
 {% block runscript %}
+var listening = false;
+
 var room_size = 50;
 var wall_thick = 6;
 var door_size = 20;
@@ -178,49 +180,25 @@ function win() {
 	}
 }
 
-function turnleft() {
-	$.post( "/post", "gameid={{ game.gameID }}&request=turn&angle=-90");
-}
-
-function turnright() {
-	$.post( "/post", "gameid={{ game.gameID }}&request=turn&angle=90");
-}
-
-function moveforward() {
-	$.post( "/post", "gameid={{ game.gameID }}&request=move");
-}
-
-$(document).keydown(function (e) {
-	var code = e.charCode || e.keyCode;
-    var input = String.fromCharCode(code);
-	if (code == '37') {
-		turnleft();
-	} else if (code == '38') {
-		moveforward();
-	} else if (code == '39') {
-		turnright();
+function triggerEvent(event) {
+	if (event) {
+		listening = false;
+		console.log(event);
+		listening = true;
 	}
-});
+}
 
-//update and animate the screen
-var FPS = 30;
-setInterval(function() {
-  draw();
-}, 1000/FPS);
-
-{% endblock %}
-});
-</script>
-
-
-<script>
-{% block channel_message %}
 function anglemod(x) { return x > 180 ? anglemod(x - 360) : x < -180 ? anglemod(x + 360) : x; }
 
-function onMessage(msg) {
-    var data = $.parseJSON(msg.data);
+function processMessage(data) {
+    //var data = $.parseJSON(msg.data);
 	console.log(data);
 	if (data.hasOwnProperty('message')) {
+		if (data.message == "error") {
+			console.log(data.error);
+			return;
+		}
+	
 		if (data.message == "turn") {
 			person.turn(anglemod(data.dir - person.dir));
 			return;
@@ -229,18 +207,80 @@ function onMessage(msg) {
 		if (data.message == "move") {
 			person.move(data.row - person.row, data.col - person.col);
 			rooms[data.row*{{ game.diff.map_size }}+data.col].doors = data.room.doors;
-			console.log(data.room.event);
+			triggerEvent(data.room.event);
 			rooms[data.row*{{ game.diff.map_size }}+data.col].visible = true;
-			return;
-		}
-		
-		if (data.message == "win") {
-			win();
+			if (data.win) {
+				win();
+			}
 			return;
 		}
 	}
 }
+
+function Server(ajaxTargetUrl) {
+	this.ajaxTargetUrl = ajaxTargetUrl;
+	
+	this.request = function(json) {
+		json['gameid'] = "{{ game.gameID }}";
+		$.ajax({
+			type: "POST",
+			url: this.ajaxTargetUrl,
+			data: json,
+			dataType: 'json'
+		})
+		.done(function(resp) {
+			processMessage( resp );
+		})
+		.fail(function( jqXHR, textStatus ) {
+			console.log( "Request failed: " + textStatus );
+		})
+		.always(function() {
+			listening = true;
+		});
+	};
+}
+
+var postServer = new Server("/post");
+
+function turnleft() {
+	postServer.request({ request: "turn", angle: "-90" });
+}
+function turnright() {
+	postServer.request({ request: "turn", angle: "90" });
+}
+function moveforward() {
+	postServer.request({ request: "move" });
+}
+
+$(document).keydown(function (e) {
+	if (listening) {
+		listening = false;
+		var code = e.charCode || e.keyCode;
+		var input = String.fromCharCode(code);
+		if (code == '37') {
+			turnleft();
+		} else if (code == '38') {
+			moveforward();
+		} else if (code == '39') {
+			turnright();
+		} else {
+			listening = true;
+		}
+	}
+});
+
+//update and animate the screen
+$(document).ready(function () {
+	listening = true;
+	
+	var FPS = 30;
+	setInterval(function() {
+		draw();
+	}, 1000/FPS);
+});
+
 {% endblock %}
+});
 </script>
 
 {% block content %}

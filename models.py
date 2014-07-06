@@ -55,7 +55,11 @@ class Room(ndb.Model):
 	event = ndb.KeyProperty(Event)
 	
 	def to_dict(self):
-		return {'doors': self.doors, 'event': self.event.get().to_dict()}
+		if (self.event):
+			event = self.event.get().to_dict()
+		else:
+			event = None
+		return {'doors': self.doors, 'event': event}
 
 	
 class Game(ndb.Model):
@@ -79,98 +83,12 @@ class Game(ndb.Model):
 	def gameID(self):
 		return self.key.id()
 		
-	@property
-	def client_id(self):
-		return str(self.gameID)
+	#@property
+	#def client_id(self):
+	#	return str(self.gameID)
 	
-	def send_message(self, dict):
-		channel.send_message( self.client_id, json.dumps(dict) )
-
-	def create_rooms(self, seed = -1):
-		self.rooms = [Room(doors = []) for i in range(self.diff.map_size*self.diff.map_size)]
-		
-		# 0: depth-first
-		# 1: randomized Prim's
-		map_gen = 1
-		
-		if (seed < 0):
-			seed = random.randint(0, len(self.rooms)-1)
-		
-		if (map_gen == 0):
-			self.end = seed
-			curr = self.end
-		
-			notvisited = range(len(self.rooms))
-			notvisited.remove(curr)
-			stack = []
-		
-			while (len(notvisited) > 0):
-				neigh = [r for r in self.neighbours(curr) if r in notvisited]
-				if (len(neigh) > 0):
-					stack.append(curr)
-					next = random.choice(neigh)
-					self.rooms[curr].doors.append(self.direction(curr, next))
-					self.rooms[next].doors.append(self.direction(next, curr))
-					curr = next
-					notvisited.remove(curr)
-				elif (len(stack) > 0):
-					curr = stack.pop()
-				else:
-					curr = random.choice(notvisited)
-					notvisited.remove(curr)
-		
-			self.start = curr
-			self.curr = self.start
-			self.visible_rooms.append(self.curr)
-			
-		elif (map_gen == 1):
-			self.start = seed
-			
-			maze = set([self.start])
-			frontier = set(self.neighbours(self.start))
-			exclude = set([])
-			
-			while (len(frontier) > 0):
-				next = random.sample(frontier, 1)[0]
-				neigh = set(self.neighbours(next)) - exclude
-				curr = random.sample(maze & neigh, 1)[0]
-				self.rooms[curr].doors.append(self.direction(curr, next))
-				self.rooms[next].doors.append(self.direction(next, curr))
-				maze.add(next)
-				frontier.remove(next)
-				frontier.update(neigh - maze - exclude)
-				if (random.random() < 2.*len(frontier)/(self.diff.map_size*self.diff.map_size)):
-					try:
-						exclude.add(random.sample(set(range(self.diff.map_size*self.diff.map_size)) - (maze|frontier), 1)[0])
-					except:
-						pass
-				
-			self.end = next
-			self.curr = self.start
-			self.visible_rooms.append(self.curr)
-				
-		
-	def neighbours(self, room):
-		result = []
-		if (room >= self.diff.map_size): # not on top row
-			result.append(room - self.diff.map_size)
-		if (room % self.diff.map_size != self.diff.map_size-1): # not on right column
-			result.append(room + 1)
-		if (room < self.diff.map_size*(self.diff.map_size-1)): # not on bottom row
-			result.append(room + self.diff.map_size)
-		if (room % self.diff.map_size != 0): # not on left column
-			result.append(room - 1)
-		return result
-		
-	def direction(self, room1, room2): # direction of room 2 from room 1 (used for placing doors)
-		if (room2 == room1+1):
-			return 1 # East
-		elif (room2 == room1-1):
-			return 3 # West
-		elif (room2 > room1):
-			return 2 # South
-		else:
-			return 0 # North
+	#def send_message(self, dict):
+	#	channel.send_message( self.client_id, json.dumps(dict) )
 			
 	@property
 	def angle(self):
@@ -179,9 +97,11 @@ class Game(ndb.Model):
 	def turn(self, angle):
 		self.dir = (self.dir + int(math.copysign(1,angle)))%4; # either turn 90 degrees left or right
 		self.put()
-		self.send_message( { 'message': "turn", 'dir': self.angle } )
+		#self.send_message( { 'message': "turn", 'dir': self.angle } )
+		return json.dumps( { 'message': "turn", 'dir': self.angle } )
 		
 	def move(self):
+		response = {}
 		if (self.dir in self.rooms[self.curr].doors):
 			if (self.dir == 0):
 				change = - self.diff.map_size
@@ -197,12 +117,15 @@ class Game(ndb.Model):
 				self.visible_rooms.append(self.curr)
 			self.moves += 1
 			self.put()
-			self.send_message( { 'message': "move", 'row': self.curr/self.diff.map_size, 'col': self.curr%self.diff.map_size, 'room': self.rooms[self.curr].to_dict() } )
+			#self.send_message( { 'message': "move", 'row': self.curr/self.diff.map_size, 'col': self.curr%self.diff.map_size, 'room': self.rooms[self.curr].to_dict() } )
+			response.update( { 'message': "move", 'row': self.curr/self.diff.map_size, 'col': self.curr%self.diff.map_size, 'room': self.rooms[self.curr].to_dict(),  'win': False } )
 				
 		if (self.curr == self.end):
-			self.send_message( { 'message': "win" } )
+			response.update( { 'win': True } )
 			self.recordCompletion()
 			self.key.delete()
+		
+		return json.dumps(response)
 			
 	def recordCompletion(self):
 		if (self.curr == self.end): # check game is finished
