@@ -154,6 +154,8 @@ class Game(ndb.Model):
 					change = - 1
 			
 				self.rooms[self.curr].event = self.rooms[self.curr].next_event_key()
+				if self.curr in self.visible_rooms:
+					self.visible_rooms.remove(self.curr)
 				self.curr += change
 				if self.curr not in self.visible_rooms:
 					self.visible_rooms.append(self.curr)

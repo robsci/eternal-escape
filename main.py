@@ -85,11 +85,13 @@ class CreateGame(BaseHandler):
 				
 			game_instance = game.createGame(game_diff)
 			self.session['gameID'] = game_instance.gameID
-			self.template_values.update({ 'game': game_instance })
+			self.template_values.update({ 'game': game_instance,
+											'welcome': "You awaken in a dark room.<br /><br />There might be a way out ..." })
 			
 		else: # trying to continue game
 			if self.session.get('gameID'):
 				game_instance = self.template_values['game']
+				self.template_values.update({ 'welcome': "You awaken again in a dark room.<br /><br />There might still be a way out ..." })
 				
 		try:
 			#token = channel.create_channel( game_instance.client_id )
