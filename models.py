@@ -6,9 +6,26 @@ import json
 import math
 
 class GameDifficulty(ndb.Model):
-	rank = ndb.IntegerProperty()
+	#rank = ndb.IntegerProperty(indexed = False)
 	desc = ndb.StringProperty(indexed = False)
-	map_size = ndb.IntegerProperty()
+	map_size = ndb.IntegerProperty(indexed = False)
+		
+	@staticmethod
+	def diff_key_name(rank):
+		return 'd'+str(rank)
+	
+	@staticmethod
+	def diff_key(rank):
+		return ndb.Key('GameDifficulty', GameDifficulty.diff_key_name(rank))
+		
+	@staticmethod
+	def rank_from_key(diff_key):
+		return diff_key.id()[1:]
+		
+	@property
+	def rank(self):
+		return GameDifficulty.rank_from_key(self.key)
+	
 	
 class GameCompletion(ndb.Model):
 	started = ndb.DateTimeProperty()
@@ -36,9 +53,9 @@ class EventOption(ndb.Model):
 
 	
 class Event(ndb.Model):
-	desc = ndb.TextProperty()
+	desc = ndb.TextProperty(indexed = False)
 	options = ndb.StructuredProperty(EventOption, repeated = True)
-	next = ndb.KeyProperty("Event")
+	next = ndb.KeyProperty("Event", indexed = False)
 	
 	@staticmethod
 	def event_key_name(eventID):
@@ -64,7 +81,7 @@ class Event(ndb.Model):
 
 class Room(ndb.Model):
 	doors = ndb.IntegerProperty(choices = [0,1,2,3], repeated = True) # 0:North, 1:East, 2:South, 3:West
-	event = ndb.KeyProperty(Event)
+	event = ndb.KeyProperty(Event, indexed = False)
 	
 	def to_dict(self):
 		if (self.event):
@@ -102,7 +119,7 @@ class Game(ndb.Model):
 	last_modified = ndb.DateTimeProperty(auto_now=True, indexed = False)
 	created = ndb.DateTimeProperty(auto_now_add=True, indexed = False)
 	
-	diff = ndb.StructuredProperty(GameDifficulty, indexed = False)
+	diff_rank = ndb.IntegerProperty(default = 0, indexed = False)
 	
 	rooms = ndb.LocalStructuredProperty(Room, repeated=True, indexed = False)
 	visible_rooms = ndb.IntegerProperty(repeated = True, indexed = False)
@@ -120,12 +137,24 @@ class Game(ndb.Model):
 	def gameID(self):
 		return self.key.id()
 		
+	@property
+	def diff(self):
+		return GameDifficulty.diff_key(self.diff_rank).get()
+		
 	#@property
 	#def client_id(self):
 	#	return str(self.gameID)
 	
 	#def send_message(self, dict):
 	#	channel.send_message( self.client_id, json.dumps(dict) )
+	
+	@property
+	def row_length(self):
+		return self.diff.map_size
+		
+	@property
+	def grid_size(self):
+		return self.row_length**2
 			
 	@property
 	def angle(self):
@@ -143,13 +172,14 @@ class Game(ndb.Model):
 	def move(self):
 		response = {}
 		if (not self.event_locked):
+			map_size = self.diff.map_size
 			if (self.dir in self.rooms[self.curr].doors):
 				if (self.dir == 0):
-					change = - self.diff.map_size
+					change = - map_size
 				elif (self.dir == 1):
 					change = 1
 				elif (self.dir == 2):
-					change = self.diff.map_size
+					change = map_size
 				elif (self.dir == 3):
 					change = - 1
 			
@@ -163,8 +193,8 @@ class Game(ndb.Model):
 				if self.rooms[self.curr].require_response():
 					self.event_locked = True
 				self.put()
-				#self.send_message( { 'message': "move", 'row': self.curr/self.diff.map_size, 'col': self.curr%self.diff.map_size, 'room': self.rooms[self.curr].to_dict() } )
-				response.update( { 'message': "move", 'row': self.curr/self.diff.map_size, 'col': self.curr%self.diff.map_size, 'room': self.rooms[self.curr].to_dict(),  'win': False } )
+				#self.send_message( { 'message': "move", 'row': self.curr/map_size, 'col': self.curr%map_size, 'room': self.rooms[self.curr].to_dict() } )
+				response.update( { 'message': "move", 'row': self.curr/map_size, 'col': self.curr%map_size, 'room': self.rooms[self.curr].to_dict(),  'win': False } )
 					
 			if (self.curr == self.end):
 				response.update( { 'win': True } )
@@ -179,7 +209,7 @@ class Game(ndb.Model):
 			
 	def recordCompletion(self):
 		if (self.curr == self.end): # check game is finished
-			GameCompletion(started = self.created, diff_rank = self.diff.rank, moves = self.moves).put()
+			GameCompletion(started = self.created, diff_rank = self.diff_rank, moves = self.moves).put()
 			
 	def addEvent(self, event_key, roomnum):
 		self.rooms[roomnum].event = event_key

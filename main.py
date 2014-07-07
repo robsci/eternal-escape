@@ -65,7 +65,7 @@ class BaseHandler(webapp2.RequestHandler):
 class MainHandler(BaseHandler):
     def get(self):
 		#template_values = { 'difficulties': game.difficulties }	
-		self.template_values.update({'difficulties': game.difficulties})
+		self.template_values.update({'difficulties': game.difficulties()})
 		template = jinja_environment.get_template('index.html')
 		self.response.out.write(template.render(self.template_values))
 		
@@ -78,12 +78,12 @@ class CreateGame(BaseHandler):
 				logging.info("Deleting game ID %s", self.session['gameID'])
 				ndb.Key('Game', int(self.session['gameID'])).delete()
 			
-			if int(diff_str) in [diff.rank for diff in game.difficulties]:
-				game_diff = game.difficulties[int(diff_str)]
+			if int(diff_str) in [diff.rank for diff in game.difficulties()]:
+				rank = int(diff_str)
 			else:
-				game_diff = game.difficulties[0]
+				rank = 0
 				
-			game_instance = game.createGame(game_diff)
+			game_instance = game.createGame(rank)
 			self.session['gameID'] = game_instance.gameID
 			self.template_values.update({ 'game': game_instance,
 											'welcome': "You awaken in a dark room.<br /><br />There might be a way out ..." })
@@ -135,12 +135,13 @@ class StatsHandler(webapp2.RequestHandler):
 		num_events = 100
 		
 		logs = GameCompletion.recent().fetch(num_events)
+		diffs = game.difficulties()
 		
-		#attempts = [0 for x in game.difficulties]
-		#total_moves = [0 for x in game.difficulties]
-		moves = [[] for x in game.difficulties]
-		times = [[] for x in game.difficulties]
-		most_recent = [datetime.datetime.fromordinal(1) for x in game.difficulties]
+		#attempts = [0 for x in diffs]
+		#total_moves = [0 for x in diffs]
+		moves = [[] for x in diffs]
+		times = [[] for x in diffs]
+		most_recent = [datetime.datetime.fromordinal(1) for x in diffs]
 		
 		for log in logs:
 			#attempts[log.diff_rank] += 1
@@ -163,7 +164,7 @@ class StatsHandler(webapp2.RequestHandler):
 		plotslist.append(	{'name':"Moves", 'vals':moves}	)
 		plotslist.append(	{'name':"Times (secs)", 'vals':times}	)
 
-		template_values = { 'difficulties': game.difficulties,
+		template_values = { 'difficulties': diffs,
 							'stats': statslist,
 							'plots': plotslist}	
 		template = jinja_environment.get_template('stats.html')

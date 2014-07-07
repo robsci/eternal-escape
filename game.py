@@ -7,14 +7,30 @@ from google.appengine.ext import ndb
 from google.appengine.api import channel
 
 from models import *
+		
+def initialisation():
+	# run this to initialise datastore entries
+	# difficulties first
+	diffs = [
+		GameDifficulty(key = GameDifficulty.diff_key(0), desc = "Easy", map_size = 4),
+		GameDifficulty(key = GameDifficulty.diff_key(1), desc = "Normal", map_size = 8),
+		GameDifficulty(key = GameDifficulty.diff_key(2), desc = "Difficult", map_size = 12)
+	]
+	
+	ndb.put_multi_async(diffs)
+	
+	# now events
 
-difficulties = [GameDifficulty(rank = 0, desc = "Easy", map_size = 4),
-				GameDifficulty(rank = 1, desc = "Normal", map_size = 8),
-				GameDifficulty(rank = 2, desc = "Difficult", map_size = 12)]
+	
+def difficulties():
+	num_diffs = 3
+	diff_keys = [GameDifficulty.diff_key(rank) for rank in range(num_diffs)]
+	diff_futures = ndb.get_multi_async(diff_keys)
+	return [future.get_result() for future in diff_futures]
 
 
-def createGame(difficulty):
-	game = Game(diff = difficulty)
+def createGame(rank):
+	game = Game(diff_rank = rank)
 	game = createRooms(game)
 	game = populateEvents(game)
 	game.put()
@@ -47,7 +63,7 @@ def createRooms(game, map_gen = 1, seed = -1):
 	# 0: depth-first
 	# 1: randomized Prim's
 	
-	game.rooms = [Room(doors = []) for i in range(game.diff.map_size*game.diff.map_size)]
+	game.rooms = [Room(doors = []) for i in range(game.grid_size)]
 	
 	if (seed < 0):
 		seed = random.randint(0, len(game.rooms)-1)
@@ -61,7 +77,7 @@ def createRooms(game, map_gen = 1, seed = -1):
 		stack = []
 	
 		while (len(notvisited) > 0):
-			neigh = [r for r in neighbours(game.diff.map_size, curr) if r in notvisited]
+			neigh = [r for r in neighbours(game.row_length, curr) if r in notvisited]
 			if (len(neigh) > 0):
 				stack.append(curr)
 				next = random.choice(neigh)
@@ -83,21 +99,21 @@ def createRooms(game, map_gen = 1, seed = -1):
 		game.start = seed
 		
 		maze = set([game.start])
-		frontier = set(neighbours(game.diff.map_size, game.start))
+		frontier = set(neighbours(game.row_length, game.start))
 		exclude = set([])
 		
 		while (len(frontier) > 0):
 			next = random.sample(frontier, 1)[0]
-			neigh = set(neighbours(game.diff.map_size, next)) - exclude
+			neigh = set(neighbours(game.row_length, next)) - exclude
 			curr = random.sample(maze & neigh, 1)[0]
 			game.rooms[curr].doors.append(direction(curr, next))
 			game.rooms[next].doors.append(direction(next, curr))
 			maze.add(next)
 			frontier.remove(next)
 			frontier.update(neigh - maze - exclude)
-			if (random.random() < 2.*len(frontier)/(game.diff.map_size*game.diff.map_size)):
+			if (random.random() < 2.*len(frontier)/(game.grid_size)):
 				try:
-					exclude.add(random.sample(set(range(game.diff.map_size*game.diff.map_size)) - (maze|frontier), 1)[0])
+					exclude.add(random.sample(set(range(game.grid_size)) - (maze|frontier), 1)[0])
 				except:
 					pass
 			

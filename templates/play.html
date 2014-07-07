@@ -11,7 +11,7 @@ var room_size = 50;
 var wall_thick = 6;
 var door_size = 20;
 
-var ctx_size = wall_thick + (room_size+wall_thick)*{{ game.diff.map_size }};
+var ctx_size = wall_thick + (room_size+wall_thick)*{{ game.row_length }};
 
 var mapDiv = $('<div/>',{'id':'mapdiv'}).css("width",ctx_size+"px").addClass("center");
 $( '#content' ).append(mapDiv);
@@ -145,8 +145,8 @@ function Goal(r, c) {
 }
 
 var rooms = [];
-for (var r=0; r < {{ game.diff.map_size }}; r++) {
-	for (var c=0; c < {{ game.diff.map_size }}; c++) {
+for (var r=0; r < {{ game.row_length }}; r++) {
+	for (var c=0; c < {{ game.row_length }}; c++) {
 		var room = new Room(r, c, []);
 		rooms.push(room);
 	}
@@ -157,10 +157,10 @@ rooms[{{ room }}].doors = {{ game.rooms[room].doors }};
 rooms[{{ room }}].visible = true;
 {% endfor %}
 
-var person = new Player({{ (game.curr / game.diff.map_size)|int }}, {{ game.curr % game.diff.map_size }}, {{ game.angle }});
+var person = new Player({{ (game.curr / game.row_length)|int }}, {{ game.curr % game.row_length }}, {{ game.angle }});
 person.visible = true;
 
-//var finish = new Goal({{ (game.end / game.diff.map_size)|int }}, {{ game.end % game.diff.map_size }});
+//var finish = new Goal({{ (game.end / game.row_length)|int }}, {{ game.end % game.row_length }});
 
 function draw() {
 	ctx.clearRect(0, 0, ctx_size, ctx_size);
@@ -213,11 +213,11 @@ function processMessage(data) {
 		}
 		
 		if (data.message == "move") {
-			var oldRoom = Math.round(person.row*{{ game.diff.map_size }}+person.col);
+			var oldRoom = Math.round(person.row*{{ game.row_length }}+person.col);
 			person.move(data.row - person.row, data.col - person.col);
-			rooms[data.row*{{ game.diff.map_size }}+data.col].doors = data.room.doors;
+			rooms[data.row*{{ game.row_length }}+data.col].doors = data.room.doors;
 			triggerEvent(data.room);
-			rooms[data.row*{{ game.diff.map_size }}+data.col].visible = true;
+			rooms[data.row*{{ game.row_length }}+data.col].visible = true;
 			if (data.win) {
 				win();
 			}
