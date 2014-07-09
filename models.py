@@ -20,7 +20,7 @@ class GameDifficulty(ndb.Model):
 		
 	@staticmethod
 	def rank_from_key(diff_key):
-		return diff_key.id()[1:]
+		return int(diff_key.id()[1:])
 		
 	@property
 	def rank(self):
