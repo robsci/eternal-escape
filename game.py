@@ -7,20 +7,33 @@ from google.appengine.ext import ndb
 from google.appengine.api import channel
 
 from models import *
-		
+
 def initialisation():
 	# run this to initialise datastore entries
 	# difficulties first
 	diffs = [
-		GameDifficulty(key = GameDifficulty.diff_key(0), desc = "Easy", map_size = 4),
-		GameDifficulty(key = GameDifficulty.diff_key(1), desc = "Normal", map_size = 8),
-		GameDifficulty(key = GameDifficulty.diff_key(2), desc = "Difficult", map_size = 12)
+		GameDifficulty(key = GameDifficulty.diff_key(0), desc = "Easy", map_size = 4, starting_items = []),
+		GameDifficulty(key = GameDifficulty.diff_key(1), desc = "Normal", map_size = 8, starting_items = []),
+		GameDifficulty(key = GameDifficulty.diff_key(2), desc = "Difficult", map_size = 12, starting_items = [])
 	]
 	
 	ndb.put_multi_async(diffs)
 	
 	# now events
+	events = [
+		Event(key = Event.event_key(0), desc = "This looks familiar"),
+		Event(key = Event.event_key(1), desc = "I recognise this place"),
+		Event(key = Event.event_key(2), desc = "Am I going in circles?"),
+		Event(key = Event.event_key(3), desc = "Back here again!"),
+		Event(key = Event.event_key(4), desc = "There seems to be some kind of scroll on the ground.", next = Event.event_key(4), options = [
+			EventOption(desc = "Leave it where it is", response = "It'll probably still be here if you come back"),
+			EventOption(desc = "Pick it up", response = "It's a map!<br />Now you can record where you have been", new_items = [0], break_event_chain = True)
+		])
+	]
+	
+	ndb.put_multi_async(events)
 
+#initialisation()
 	
 def difficulties():
 	num_diffs = 3
@@ -31,8 +44,10 @@ def difficulties():
 
 def createGame(rank):
 	game = Game(diff_rank = rank)
+	game.items = game.diff.starting_items
 	game = createRooms(game)
 	game = populateEvents(game)
+	
 	game.put()
 	return game
 
@@ -123,9 +138,21 @@ def createRooms(game, map_gen = 1, seed = -1):
 		
 	return game
 	
+def randomWalk(game, start, num):
+	curr = start
+	while num > 0:
+		door = random.choice(game.rooms[curr].doors)
+		if (door == 0):
+			curr -= game.row_length
+		elif (door == 1):
+			curr += 1
+		elif (door == 2):
+			curr += game.row_length
+		elif (door == 3):
+			curr -= 1
+		num -= 1
+	return curr
+	
 def populateEvents(game):
-	revisit_event = Event.get_or_insert(Event.event_key_name(0), desc = "This looks familiar")
-	game.addEvent(revisit_event.key, game.start)
-	#test_event = Event.get_or_insert(Event.event_key_name(1), desc = "Test Event", options = [EventOption(desc = "OK"), EventOption(desc = "Cancel")])
-	#game.addEvent(test_event.key, 1)
+	game.addEvent(4, randomWalk(game,game.start,5))
 	return game

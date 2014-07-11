@@ -221,7 +221,9 @@ function processMessage(data) {
 			if (data.win) {
 				win();
 			}
-			setTimeout(function() {rooms[oldRoom].visible = false;}, 100);
+			if (!data.map) {
+				setTimeout(function() {rooms[oldRoom].visible = false;}, 100);
+			}
 			return;
 		}
 		

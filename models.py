@@ -5,10 +5,15 @@ import random
 import json
 import math
 
+return_events = [0,1,2,3]
+
+items = ['Map','Paper','Pen']
+
 class GameDifficulty(ndb.Model):
 	#rank = ndb.IntegerProperty(indexed = False)
 	desc = ndb.StringProperty(indexed = False)
 	map_size = ndb.IntegerProperty(indexed = False)
+	starting_items = ndb.IntegerProperty(repeated = True, indexed = False)
 		
 	@staticmethod
 	def diff_key_name(rank):
@@ -41,20 +46,41 @@ class GameCompletion(ndb.Model):
 	@classmethod
 	def recent(cls):
 		return cls.query().order(-cls.finished)
-
-
+	
 class EventOption(ndb.Model):
 	desc = ndb.TextProperty()
+	req_items = ndb.IntegerProperty(repeated = True)
+	response = ndb.TextProperty()
+	new_items = ndb.IntegerProperty(repeated = True)
+	break_event_chain = ndb.BooleanProperty(default = False)
+	
+	@property
+	def text(self):
+		if len(self.req_items)>0:
+			string = '['
+			for item in self.req_items:
+				string += items[item] + ', '
+			string = string[:-2]
+			string += '] '
+			return string + self.desc
+		else:
+			return self.desc
 	
 	def choose(self, game):
-		game.event_locked = False
-		game.put()
-		return { 'message': "event-response", 'response': "good choice" }
+		if (set(self.req_items).issubset(set(game.items))):
+			game.event_locked = False
+			game.addItems(self.new_items)
+			if self.break_event_chain:
+				game.addEvent(0, game.curr)
+			game.put()
+			return { 'message': "event-response", 'response': self.response }
+		else:
+			return { 'message': "error", 'error': "required item not present" }
 
-	
+
 class Event(ndb.Model):
 	desc = ndb.TextProperty(indexed = False)
-	options = ndb.StructuredProperty(EventOption, repeated = True)
+	options = ndb.LocalStructuredProperty(EventOption, repeated = True)
 	next = ndb.KeyProperty("Event", indexed = False)
 	
 	@staticmethod
@@ -70,7 +96,7 @@ class Event(ndb.Model):
 		return event_key.id()[1:]
 		
 	def to_dict(self):
-		return {'desc': self.desc, 'options': [opt.desc for opt in self.options]}
+		return {'desc': self.desc, 'options': [opt.text for opt in self.options]}
 		
 	def event_reply(self, reply, game):
 		if (reply >= len(self.options) or reply < 0):
@@ -78,7 +104,7 @@ class Event(ndb.Model):
 		else:
 			return self.options[reply].choose(game)
 
-
+	
 class Room(ndb.Model):
 	doors = ndb.IntegerProperty(choices = [0,1,2,3], repeated = True) # 0:North, 1:East, 2:South, 3:West
 	event = ndb.KeyProperty(Event, indexed = False)
@@ -107,7 +133,7 @@ class Room(ndb.Model):
 		return response
 		
 	def next_event_key(self):
-		key = Event.event_key(0)
+		key = Event.event_key(random.choice(return_events))
 		if (self.event):
 			event = self.event.get()
 			if (event and event.next):
@@ -125,6 +151,8 @@ class Game(ndb.Model):
 	visible_rooms = ndb.IntegerProperty(repeated = True, indexed = False)
 	event_locked = ndb.BooleanProperty(default = False, indexed = False)
 	
+	items = ndb.IntegerProperty(repeated = True, indexed = False)
+	
 	start = ndb.IntegerProperty(indexed = False)
 	end = ndb.IntegerProperty(indexed = False)
 	
@@ -140,6 +168,10 @@ class Game(ndb.Model):
 	@property
 	def diff(self):
 		return GameDifficulty.diff_key(self.diff_rank).get()
+		
+	@property
+	def map(self):
+		return (0 in self.items)
 		
 	#@property
 	#def client_id(self):
@@ -184,7 +216,7 @@ class Game(ndb.Model):
 					change = - 1
 			
 				self.rooms[self.curr].event = self.rooms[self.curr].next_event_key()
-				if self.curr in self.visible_rooms:
+				if not self.map and (self.curr in self.visible_rooms):
 					self.visible_rooms.remove(self.curr)
 				self.curr += change
 				if self.curr not in self.visible_rooms:
@@ -194,7 +226,7 @@ class Game(ndb.Model):
 					self.event_locked = True
 				self.put()
 				#self.send_message( { 'message': "move", 'row': self.curr/map_size, 'col': self.curr%map_size, 'room': self.rooms[self.curr].to_dict() } )
-				response.update( { 'message': "move", 'row': self.curr/map_size, 'col': self.curr%map_size, 'room': self.rooms[self.curr].to_dict(),  'win': False } )
+				response.update( { 'message': "move", 'row': self.curr/map_size, 'col': self.curr%map_size, 'room': self.rooms[self.curr].to_dict(),  'map': self.map, 'win': False } )
 					
 			if (self.curr == self.end):
 				response.update( { 'win': True } )
@@ -212,6 +244,9 @@ class Game(ndb.Model):
 			GameCompletion(started = self.created, diff_rank = self.diff_rank, moves = self.moves).put()
 			
 	def addEvent(self, event_key, roomnum):
-		self.rooms[roomnum].event = event_key
-				
-				
+		self.rooms[roomnum].event = Event.event_key(event_key)
+		
+	def addItems(self, new_items):
+		for item in new_items:
+			if item not in self.items:
+				self.items.append(item)
