@@ -12,6 +12,10 @@ body {
 	background-color: white;
 }
 
+#mapdiv{
+	padding:10px;
+}
+
 #title {
 	width: 500px;
 	text-align: center;

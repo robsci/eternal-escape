@@ -11,12 +11,21 @@ var room_size = 50;
 var wall_thick = 6;
 var door_size = 20;
 
-var ctx_size = wall_thick + (room_size+wall_thick)*{{ game.row_length }};
+var offset_x = 0;
+var offset_y = 0;
 
-var mapDiv = $('<div/>',{'id':'mapdiv'}).css("width",ctx_size+"px").addClass("center");
+var offset_x_steps = 0;
+var offset_y_steps = 0;
+
+//var ctx_size = (wall_thick + (room_size+wall_thick)*{{ game.row_length }});
+var ctx_height = window.innerHeight - 460;
+var ctx_width = window.innerWidth - 40;
+//var ctx_width = Math.min(window.innerWidth, ((room_size+wall_thick)*{{ game.row_length }}));
+
+var mapDiv = $('<div/>',{'id':'mapdiv'}).css("width",ctx_width+"px").addClass("center");
 $( '#content' ).append(mapDiv);
 
-var mapCanvas = $('<canvas/>',{'id':'map'}).attr({'width':ctx_size,'height':ctx_size});
+var mapCanvas = $('<canvas/>',{'id':'map'}).attr({'width':ctx_width,'height':ctx_height});
 $( '#mapdiv' ).append(mapCanvas);
 
 var map = document.getElementById("map");
@@ -47,7 +56,7 @@ function Room(r, c, doors) {
 		this.update();
 		if (this.visible) {
 			ctx.save();
-			ctx.translate(0.5*wall_thick + this.col*(room_size+wall_thick), 0.5*wall_thick + this.row*(room_size+wall_thick));
+			ctx.translate(offset_x + 0.5*wall_thick + this.col*(room_size+wall_thick), offset_y + 0.5*wall_thick + this.row*(room_size+wall_thick));
 			ctx.beginPath();
 			ctx.lineWidth = wall_thick;
 			var redcolor = 255+Math.round((14.-255.)*(this.color-255)/(12-255));
@@ -64,7 +73,7 @@ function Room(r, c, doors) {
    
 			for (var i=0; i < this.doors.length; i++) {
 				ctx.beginPath();
-				ctx.lineWidth = wall_thick;
+				ctx.lineWidth = wall_thick*1.2;
 				ctx.strokeStyle = "white";
 				ctx.moveTo(xshifts[this.doors[i]], yshifts[this.doors[i]]);
 				ctx.lineTo(xshifts[this.doors[i]] + xdiffs[this.doors[i]], yshifts[this.doors[i]]+ ydiffs[this.doors[i]]);
@@ -107,11 +116,18 @@ function Player(r, c, direction) {
 		this.dirsteps -= sign(this.dirsteps);
 	};
 	
+	this.position_x = function() {
+		return 0.5*wall_thick + this.col*(room_size+wall_thick) + room_size/2.;
+	}
+	this.position_y = function() {
+		return 0.5*wall_thick + this.row*(room_size+wall_thick) + room_size/2.;
+	}
+	
 	this.draw = function() {
 	this.update();
 	if(this.visible) {
 		ctx.save();
-		ctx.translate(0.5*wall_thick + this.col*(room_size+wall_thick) + room_size/2., 0.5*wall_thick + this.row*(room_size+wall_thick) + room_size/2.);
+		ctx.translate(offset_x + this.position_x(), offset_y + this.position_y() );
 		ctx.rotate(this.dir * Math.PI / 180);
 		ctx.beginPath();
 		ctx.moveTo(0, -room_size/5);
@@ -134,7 +150,7 @@ function Goal(r, c) {
 	this.draw = function() {
 		if (this.visible) {
 			ctx.save();
-			ctx.translate(0.5*wall_thick + this.col*(room_size+wall_thick) + room_size*(1./2-1./10), 0.5*wall_thick + this.row*(room_size+wall_thick) + room_size/3.);
+			ctx.translate(offset_x + 0.5*wall_thick + this.col*(room_size+wall_thick) + room_size*(1./2-1./10), offset_y + 0.5*wall_thick + this.row*(room_size+wall_thick) + room_size/3.);
 			ctx.beginPath();
 			ctx.fillStyle="gold";
 			ctx.rect(0,0,room_size/5.,room_size/5.);
@@ -160,10 +176,24 @@ rooms[{{ room }}].visible = true;
 var person = new Player({{ (game.curr / game.row_length)|int }}, {{ game.curr % game.row_length }}, {{ game.angle }});
 person.visible = true;
 
+offset_x = -person.position_x() + ctx_width/2.;
+offset_y = -person.position_y() + ctx_height/2.;
+
 //var finish = new Goal({{ (game.end / game.row_length)|int }}, {{ game.end % game.row_length }});
 
+function update_offset() {
+	offset_x += 3*sign(offset_x_steps);
+	offset_x_steps -= sign(offset_x_steps);
+	offset_y += 3*sign(offset_y_steps);
+	offset_y_steps -= sign(offset_y_steps);
+}
+
 function draw() {
-	ctx.clearRect(0, 0, ctx_size, ctx_size);
+	ctx.clearRect(0, 0, ctx_width, ctx_height);
+	if (offset_x + person.position_x() < 1.7*room_size || offset_x + person.position_x() > ctx_width - 1.7*room_size || offset_y + person.position_y() < 1.7*room_size || offset_y + person.position_y() > ctx_height - 1.7*room_size) {
+		offset_x_steps = Math.round((-person.position_x() + ctx_width/2. - offset_x)/3);
+		offset_y_steps = Math.round((-person.position_y() + ctx_height/2. - offset_y)/3);
+	}
 	for (var i = 0; i < rooms.length; i++) {
 		rooms[i].draw();
 	}
@@ -298,6 +328,7 @@ $(document).ready(function () {
 	
 	var FPS = 30;
 	setInterval(function() {
+		update_offset();
 		draw();
 	}, 1000/FPS);
 });

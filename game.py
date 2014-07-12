@@ -135,7 +135,8 @@ def createRooms(game, map_gen = 1, seed = -1):
 		game.end = next
 		game.curr = game.start
 		game.visible_rooms.append(game.curr)
-		
+	
+	#game.visible_rooms = range(len(game.rooms))
 	return game
 	
 def randomWalk(game, start, num):
@@ -151,7 +152,10 @@ def randomWalk(game, start, num):
 		elif (door == 3):
 			curr -= 1
 		num -= 1
-	return curr
+	if curr == game.end:
+		return randomWalk(game, curr, 1)
+	else:
+		return curr
 	
 def populateEvents(game):
 	game.addEvent(4, randomWalk(game,game.start,5))
