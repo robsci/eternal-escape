@@ -38,6 +38,9 @@ class GameCompletion(ndb.Model):
 	
 	diff_rank = ndb.IntegerProperty()
 	moves = ndb.IntegerProperty()
+	perfect_moves = ndb.IntegerProperty()
+	
+	wrong_moves = ndb.ComputedProperty(lambda self: self.moves - self.perfect_moves)
 	
 	@property
 	def time(self):
@@ -108,13 +111,14 @@ class Event(ndb.Model):
 class Room(ndb.Model):
 	doors = ndb.IntegerProperty(choices = [0,1,2,3], repeated = True) # 0:North, 1:East, 2:South, 3:West
 	event = ndb.KeyProperty(Event, indexed = False)
+	distance_to_exit = ndb.IntegerProperty(indexed = False)
 	
 	def to_dict(self):
 		if (self.event):
 			event = self.event.get().to_dict()
 		else:
 			event = None
-		return {'doors': self.doors, 'event': event}
+		return {'doors': self.doors, 'event': event, 'distance': self.distance_to_exit}
 		
 	def require_response(self):
 		ans = False
@@ -229,7 +233,7 @@ class Game(ndb.Model):
 				response.update( { 'message': "move", 'row': self.curr/map_size, 'col': self.curr%map_size, 'room': self.rooms[self.curr].to_dict(),  'map': self.map, 'win': False } )
 					
 			if (self.curr == self.end):
-				response.update( { 'win': True } )
+				response.update( { 'win': True, 'moves': self.moves, 'perfect': self.rooms[self.start].distance_to_exit } )
 				self.recordCompletion()
 				self.key.delete()
 			
@@ -241,7 +245,7 @@ class Game(ndb.Model):
 			
 	def recordCompletion(self):
 		if (self.curr == self.end): # check game is finished
-			GameCompletion(started = self.created, diff_rank = self.diff_rank, moves = self.moves).put()
+			GameCompletion(started = self.created, diff_rank = self.diff_rank, moves = self.moves, perfect_moves = self.rooms[self.start].distance_to_exit).put()
 			
 	def addEvent(self, event_key, roomnum):
 		self.rooms[roomnum].event = Event.event_key(event_key)

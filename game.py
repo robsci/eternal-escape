@@ -72,6 +72,23 @@ def direction(room1, room2): # direction of room 2 from room 1 (used for placing
 		return 2 # South
 	else:
 		return 0 # North
+		
+def markDistance(game, room):
+	for door in game.rooms[room].doors:
+		if (door == 0):
+			next = room - game.row_length
+		elif (door == 1):
+			next = room + 1
+		elif (door == 2):
+			next = room + game.row_length
+		elif (door == 3):
+			next = room - 1
+		
+		if (not game.rooms[next].distance_to_exit):
+			game.rooms[next].distance_to_exit = game.rooms[room].distance_to_exit + 1
+			game = markDistance(game, next)
+			
+	return game
 	
 def createRooms(game, map_gen = 1, seed = -1):
 	# map_gen
@@ -137,7 +154,11 @@ def createRooms(game, map_gen = 1, seed = -1):
 		game.visible_rooms.append(game.curr)
 	
 	#game.visible_rooms = range(len(game.rooms))
+	game.rooms[game.end].distance_to_exit = 0
+	game = markDistance(game, game.end)
 	return game
+
+			
 	
 def randomWalk(game, start, num):
 	curr = start

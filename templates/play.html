@@ -43,13 +43,26 @@ function Room(r, c, doors) {
 	this.colorsteps = 0;
 	this.dcolor = 1.8;
 	
+	this.distance = 0;
+	
 	this.fadeOut = function() {
 		this.colorsteps = Math.round(243/this.dcolor);
-	}
+	};
 	
 	this.update = function() {
 		this.color += this.dcolor*sign(this.colorsteps);
 		this.colorsteps -= sign(this.colorsteps);
+	};
+	
+	this.floorColor = function() {
+		var tmpred = 153 + (this.color - 12)*(255.-153.)/(255.-12.);
+		var tmpgreen = 147 + (this.color - 12)*(255.-147.)/(255.-12.);
+		var tmpblue = 147 + (this.color - 12)*(255.-147.)/(255.-12.);
+		if (this.distance > 20) {
+			return "rgb("+Math.round(tmpred)+", "+Math.round(tmpgreen)+", "+Math.round(tmpblue)+")";
+		} else {
+			return "rgb("+Math.round((tmpred-255.)*this.distance/20.+255.)+", "+Math.round((tmpgreen-255.)*this.distance/20.+255.)+", "+Math.round((tmpblue-255.)*this.distance/20.+255.)+")";
+		}
 	};
 	
 	this.draw = function() {
@@ -61,7 +74,7 @@ function Room(r, c, doors) {
 			ctx.lineWidth = wall_thick;
 			var redcolor = 255+Math.round((14.-255.)*(this.color-255)/(12-255));
 			ctx.strokeStyle = "rgb("+Math.round(redcolor)+", "+Math.round(this.color)+", "+Math.round(this.color)+")";
-			ctx.fillStyle = this.doors.length == 0 ? ctx.strokeStyle : "white";
+			ctx.fillStyle = this.doors.length == 0 ? ctx.strokeStyle : this.floorColor();
 			ctx.rect(0, 0, room_size, room_size);
 			ctx.stroke();
 			ctx.fill();
@@ -74,7 +87,7 @@ function Room(r, c, doors) {
 			for (var i=0; i < this.doors.length; i++) {
 				ctx.beginPath();
 				ctx.lineWidth = wall_thick*1.2;
-				ctx.strokeStyle = "white";
+				ctx.strokeStyle = this.floorColor();
 				ctx.moveTo(xshifts[this.doors[i]], yshifts[this.doors[i]]);
 				ctx.lineTo(xshifts[this.doors[i]] + xdiffs[this.doors[i]], yshifts[this.doors[i]]+ ydiffs[this.doors[i]]);
 				ctx.stroke();
@@ -171,6 +184,7 @@ for (var r=0; r < {{ game.row_length }}; r++) {
 {% for room in game.visible_rooms %}
 rooms[{{ room }}].doors = {{ game.rooms[room].doors }};
 rooms[{{ room }}].visible = true;
+ {% if game.rooms[room].distance_to_exit is number %} rooms[{{ room }}].distance = {{ game.rooms[room].distance_to_exit }}; {% endif %}
 {% endfor %}
 
 var person = new Player({{ (game.curr / game.row_length)|int }}, {{ game.curr % game.row_length }}, {{ game.angle }});
@@ -190,7 +204,7 @@ function update_offset() {
 
 function draw() {
 	ctx.clearRect(0, 0, ctx_width, ctx_height);
-	if (offset_x + person.position_x() < 1.7*room_size || offset_x + person.position_x() > ctx_width - 1.7*room_size || offset_y + person.position_y() < 1.7*room_size || offset_y + person.position_y() > ctx_height - 1.7*room_size) {
+	if (offset_x + person.position_x() < 1.2*room_size || offset_x + person.position_x() > ctx_width - 1.2*room_size || offset_y + person.position_y() < 1.2*room_size || offset_y + person.position_y() > ctx_height - 1.2*room_size) {
 		offset_x_steps = Math.round((-person.position_x() + ctx_width/2. - offset_x)/3);
 		offset_y_steps = Math.round((-person.position_y() + ctx_height/2. - offset_y)/3);
 	}
@@ -201,10 +215,10 @@ function draw() {
 	//finish.draw();
 }
 
-function win() {
+function win(num_moves, ideal_moves) {
 	//finish.visible = false;
 	//$( "#mapdiv" ).after("<div id='win' class='center'>You have escaped!</div>");
-	$('#window-desc').html("You have escaped!").css('color','rgb(24,23,22)');
+	$('#window-desc').html("You have escaped!<br /><br />You took "+num_moves+" moves.<br />The quickest escape would have taken only "+ideal_moves+" moves!").css('color','rgb(24,23,22)');
 	$( 'body' ).addClass("white");
 	$( '#window' ).css('background-color',"white");
 	for (var i = 0; i < rooms.length; i++) {
@@ -248,8 +262,9 @@ function processMessage(data) {
 			rooms[data.row*{{ game.row_length }}+data.col].doors = data.room.doors;
 			triggerEvent(data.room);
 			rooms[data.row*{{ game.row_length }}+data.col].visible = true;
+			rooms[data.row*{{ game.row_length }}+data.col].distance = data.room.distance;
 			if (data.win) {
-				win();
+				win(data.moves, data.perfect);
 			}
 			if (!data.map) {
 				setTimeout(function() {rooms[oldRoom].visible = false;}, 100);
